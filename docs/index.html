@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Search — Real Estate AI Agent</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3d;
+      --accent: #6c63ff; --accent-hover: #7c74ff;
+      --text: #e2e4f0; --muted: #8b8fa8;
+      --success: #22c55e; --danger: #ef4444;
+      --card: #1e2130; --tag: #252840;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* Setup overlay */
+    #setup-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; padding: 24px;
+    }
+    #setup-overlay.hidden { display: none; }
+    .setup-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 36px 40px; max-width: 480px; width: 100%;
+    }
+    .setup-card h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: var(--accent); }
+    .setup-card p { font-size: 14px; color: var(--muted); margin-bottom: 24px; line-height: 1.6; }
+    .setup-field { margin-bottom: 16px; }
+    .setup-field label { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+    .setup-field input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); font-size: 14px; padding: 10px 14px; border-radius: 8px; outline: none;
+    }
+    .setup-field input:focus { border-color: var(--accent); }
+    .setup-save {
+      width: 100%; background: var(--accent); border: none; color: #fff;
+      font-size: 15px; font-weight: 600; padding: 12px; border-radius: 8px;
+      cursor: pointer; margin-top: 8px; transition: background 0.15s;
+    }
+    .setup-save:hover { background: var(--accent-hover); }
+    .setup-note { font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.5; }
+    .setup-note a { color: var(--accent); }
+
+    /* Header */
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 16px 24px; display: flex; align-items: center; gap: 12px;
+    }
+    header .logo { font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+    .badge { background: var(--tag); color: var(--success); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .settings-btn {
+      background: var(--tag); border: 1px solid var(--border); color: var(--muted);
+      font-size: 13px; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .settings-btn:hover { border-color: var(--accent); color: var(--text); }
+    .api-status { font-size: 12px; color: var(--muted); font-family: monospace; }
+
+    /* Search */
+    .search-wrap { max-width: 760px; margin: 48px auto 0; padding: 0 24px; }
+    .search-box {
+      display: flex; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    }
+    .search-box input { flex: 1; background: transparent; border: none; color: var(--text); font-size: 16px; padding: 16px 20px; outline: none; }
+    .search-box input::placeholder { color: var(--muted); }
+    .search-box button { background: var(--accent); border: none; color: #fff; font-size: 15px; font-weight: 600; padding: 0 28px; cursor: pointer; transition: background 0.15s; }
+    .search-box button:hover { background: var(--accent-hover); }
+    .search-box button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Tabs */
+    .tabs { max-width: 760px; margin: 20px auto 0; padding: 0 24px; display: flex; gap: 4px; flex-wrap: wrap; }
+    .tab { padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: 1px solid transparent; color: var(--muted); transition: all 0.15s; background: transparent; }
+    .tab:hover { color: var(--text); background: var(--surface); }
+    .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* Options */
+    .options-row { max-width: 760px; margin: 12px auto 0; padding: 0 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .options-row label { font-size: 13px; color: var(--muted); }
+    .options-row select, .options-row input[type=number] { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 5px 10px; border-radius: 6px; outline: none; }
+    .options-row select:focus, .options-row input:focus { border-color: var(--accent); }
+
+    /* Results */
+    .results-wrap { max-width: 760px; margin: 32px auto 48px; padding: 0 24px; }
+    .results-meta { font-size: 13px; color: var(--muted); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+    .results-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); display: inline-block; }
+    .result-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 12px; transition: border-color 0.15s; }
+    .result-card:hover { border-color: var(--accent); }
+    .result-card .pos { font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+    .result-card a { color: var(--accent); font-size: 16px; font-weight: 600; text-decoration: none; line-height: 1.4; }
+    .result-card a:hover { text-decoration: underline; }
+    .result-card .url { font-size: 12px; color: var(--success); margin: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .result-card .snippet { font-size: 14px; color: var(--muted); line-height: 1.6; margin-top: 6px; }
+    .result-card .meta-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .tag { background: var(--tag); color: var(--muted); font-size: 11px; padding: 2px 8px; border-radius: 99px; }
+    .images-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .image-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; transition: border-color 0.15s; }
+    .image-card:hover { border-color: var(--accent); }
+    .image-card img { width: 100%; height: 160px; object-fit: cover; display: block; background: var(--surface); }
+    .image-card .img-title { font-size: 12px; color: var(--muted); padding: 8px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .video-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; display: flex; gap: 16px; padding: 14px 16px; margin-bottom: 12px; text-decoration: none; color: inherit; transition: border-color 0.15s; }
+    .video-card:hover { border-color: var(--accent); }
+    .video-thumb { width: 140px; height: 80px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: var(--surface); }
+    .video-info { flex: 1; min-width: 0; }
+    .video-info .v-title { font-size: 15px; font-weight: 600; color: var(--accent); margin-bottom: 6px; line-height: 1.4; }
+    .video-info .v-snippet { font-size: 13px; color: var(--muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .video-info .v-meta { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .spinner { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 0; gap: 16px; color: var(--muted); }
+    .spinner .ring { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { text-align: center; padding: 80px 0; color: var(--muted); font-size: 15px; }
+    .empty .icon { font-size: 40px; margin-bottom: 12px; }
+    .error-box { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 10px; padding: 16px 20px; color: #fca5a5; font-size: 14px; }
+
+    /* Extract */
+    .extract-panel { max-width: 760px; margin: 32px auto 0; padding: 0 24px; display: none; }
+    .extract-panel.active { display: block; }
+    .extract-form { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+    .extract-form h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+    .form-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 180px; }
+    .form-group label { font-size: 12px; color: var(--muted); font-weight: 500; }
+    .form-group input, .form-group select { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 14px; padding: 9px 12px; border-radius: 8px; outline: none; width: 100%; }
+    .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+    .extract-btn { background: var(--accent); border: none; color: #fff; font-size: 14px; font-weight: 600; padding: 9px 24px; border-radius: 8px; cursor: pointer; white-space: nowrap; transition: background 0.15s; align-self: flex-end; }
+    .extract-btn:hover { background: var(--accent-hover); }
+    .extract-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .table-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+    .table-meta .info { font-size: 13px; color: var(--muted); }
+    .table-meta .info strong { color: var(--text); }
+    .csv-btn { background: var(--success); border: none; color: #000; font-size: 13px; font-weight: 700; padding: 7px 18px; border-radius: 8px; cursor: pointer; }
+    .csv-btn:hover { opacity: 0.85; }
+    .table-scroll { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+    table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.data-table thead th { background: var(--surface); color: var(--muted); font-weight: 600; text-align: left; padding: 10px 14px; white-space: nowrap; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+    table.data-table tbody tr { border-bottom: 1px solid var(--border); }
+    table.data-table tbody tr:hover { background: var(--surface); }
+    table.data-table tbody td { padding: 9px 14px; color: var(--text); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    table.data-table tbody td a { color: var(--accent); text-decoration: none; }
+    .table-page-controls { display: flex; align-items: center; gap: 10px; justify-content: flex-end; margin-top: 12px; font-size: 13px; color: var(--muted); }
+    .page-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+    .page-btn:disabled { opacity: 0.3; cursor: default; }
+    .page-btn:not(:disabled):hover { border-color: var(--accent); }
+    .json-toggle { margin-top: 32px; border-top: 1px solid var(--border); padding-top: 20px; }
+    .json-toggle summary { font-size: 13px; color: var(--muted); cursor: pointer; margin-bottom: 12px; }
+    pre.json { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: 12px; overflow-x: auto; color: #a5b4fc; max-height: 400px; overflow-y: auto; line-height: 1.6; }
+  </style>
+</head>
+<body>
+
+<!-- First-run setup overlay -->
+<div id="setup-overlay">
+  <div class="setup-card">
+    <h2>⚡ Connect your Search API</h2>
+    <p>
+      This tool requires a running instance of the self-hosted Search API.
+      Enter the URL and API key to get started. These are saved locally in your browser.
+    </p>
+    <div class="setup-field">
+      <label>API URL</label>
+      <input id="setup-url" type="url" placeholder="https://search.yourdomain.com or http://localhost:8000" />
+    </div>
+    <div class="setup-field">
+      <label>API Key</label>
+      <input id="setup-key" type="password" placeholder="your-api-key" />
+    </div>
+    <button class="setup-save" onclick="saveSetup()">Save &amp; continue</button>
+    <p class="setup-note">
+      Don't have an API yet?
+      See the <a href="https://github.com/richardawe/real_estate_ai_agent" target="_blank">repo README</a>
+      for setup instructions. Runs free on your own machine or VPS.
+    </p>
+  </div>
+</div>
+
+<header>
+  <span class="logo">⚡ Search API</span>
+  <span class="badge">● self-hosted</span>
+  <div class="header-right">
+    <span class="api-status" id="apiStatus"></span>
+    <button class="settings-btn" onclick="showSetup()">⚙ Settings</button>
+  </div>
+</header>
+
+<div class="search-wrap">
+  <div class="search-box">
+    <input id="query" type="text" placeholder="Search anything…" autofocus />
+    <button id="searchBtn" onclick="doSearch()">Search</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-type="search"  onclick="setTab(this)">🌐 Web</button>
+  <button class="tab" data-type="news"            onclick="setTab(this)">📰 News</button>
+  <button class="tab" data-type="images"          onclick="setTab(this)">🖼 Images</button>
+  <button class="tab" data-type="videos"          onclick="setTab(this)">▶️ Videos</button>
+  <button class="tab" data-type="extract"         onclick="setTab(this)">📥 Extract</button>
+</div>
+
+<div class="options-row">
+  <label>Results</label>
+  <input id="numResults" type="number" value="10" min="1" max="20" style="width:60px" />
+  <label>Page</label>
+  <input id="pageNum" type="number" value="1" min="1" style="width:60px" />
+  <label>Language</label>
+  <select id="lang">
+    <option value="">Any</option>
+    <option value="en">English</option>
+    <option value="es">Spanish</option>
+    <option value="fr">French</option>
+    <option value="de">German</option>
+    <option value="pt">Portuguese</option>
+    <option value="ja">Japanese</option>
+  </select>
+</div>
+
+<div class="extract-panel" id="extractPanel">
+  <div class="extract-form">
+    <h3>Extract data from a URL</h3>
+    <div class="form-row">
+      <div class="form-group" style="flex:3">
+        <label>URL</label>
+        <input id="extractUrl" type="url" placeholder="https://example.com/directory" />
+      </div>
+      <div class="form-group" style="flex:1">
+        <label>Mode</label>
+        <select id="extractMode">
+          <option value="auto">Auto-detect</option>
+          <option value="tables">Tables</option>
+          <option value="links">Links</option>
+          <option value="list">List items</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:0 0 auto">
+        <label>Table #</label>
+        <input id="tableIndex" type="number" value="0" min="0" style="width:70px" />
+      </div>
+      <button class="extract-btn" id="extractBtn" onclick="doExtract()">Extract</button>
+    </div>
+  </div>
+  <div id="extractResults"></div>
+</div>
+
+<div class="results-wrap" id="results">
+  <div class="empty"><div class="icon">🔍</div>Enter a query and hit Search</div>
+</div>
+
+<script>
+  let BASE_URL = '';
+  let API_KEY  = '';
+  let currentType = 'search';
+  let lastRaw = null;
+  let extractData = null;
+  let extractPage = 0;
+  const PAGE_SIZE = 50;
+
+  // ── Setup ─────────────────────────────────────────────────────────────────
+
+  function loadConfig() {
+    BASE_URL = (localStorage.getItem('searchApiUrl') || '').replace(/\/$/, '');
+    API_KEY  = localStorage.getItem('searchApiKey') || '';
+    if (!BASE_URL) {
+      document.getElementById('setup-overlay').classList.remove('hidden');
+    } else {
+      document.getElementById('setup-overlay').classList.add('hidden');
+      document.getElementById('apiStatus').textContent = new URL(BASE_URL).hostname;
+    }
+  }
+
+  function saveSetup() {
+    const url = document.getElementById('setup-url').value.trim().replace(/\/$/, '');
+    const key = document.getElementById('setup-key').value.trim();
+    if (!url) { alert('Please enter the API URL.'); return; }
+    localStorage.setItem('searchApiUrl', url);
+    localStorage.setItem('searchApiKey', key);
+    loadConfig();
+  }
+
+  function showSetup() {
+    document.getElementById('setup-url').value = BASE_URL;
+    document.getElementById('setup-key').value = API_KEY;
+    document.getElementById('setup-overlay').classList.remove('hidden');
+  }
+
+  // ── Tabs ──────────────────────────────────────────────────────────────────
+
+  function setTab(el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    currentType = el.dataset.type;
+    const isExtract = currentType === 'extract';
+    document.getElementById('extractPanel').classList.toggle('active', isExtract);
+    document.querySelector('.search-wrap').style.display  = isExtract ? 'none' : '';
+    document.querySelector('.options-row').style.display  = isExtract ? 'none' : '';
+    document.getElementById('results').style.display      = isExtract ? 'none' : '';
+    if (!isExtract && lastRaw) renderResults(lastRaw, currentType);
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
+
+  document.getElementById('query').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+  async function doSearch() {
+    const q   = document.getElementById('query').value.trim();
+    if (!q || !BASE_URL) return;
+    const num  = parseInt(document.getElementById('numResults').value) || 10;
+    const page = parseInt(document.getElementById('pageNum').value) || 1;
+    const hl   = document.getElementById('lang').value || undefined;
+    const btn  = document.getElementById('searchBtn');
+    btn.disabled = true; btn.textContent = 'Searching…';
+    document.getElementById('results').style.display = '';
+    document.getElementById('results').innerHTML = '<div class="spinner"><div class="ring"></div><span>Searching…</span></div>';
+    const body = { q, num, page };
+    if (hl) body.hl = hl;
+    try {
+      const res  = await fetch(`${BASE_URL}/${currentType}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      lastRaw = data;
+      renderResults(data, currentType);
+    } catch (err) {
+      document.getElementById('results').innerHTML = `<div class="error-box">⚠️ ${err.message}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Search';
+    }
+  }
+
+  function renderResults(data, type) {
+    const wrap  = document.getElementById('results');
+    const list  = data.organic || data.news || data.images || data.videos || [];
+    const count = list.length;
+    const q     = data.searchParameters?.q || '';
+    let html = `<div class="results-meta"><span class="dot"></span>${count} result${count !== 1 ? 's' : ''} for <strong style="color:var(--text);margin-left:4px">"${q}"</strong>&nbsp;·&nbsp;<span style="color:var(--muted)">${type}</span></div>`;
+    if (count === 0) {
+      html += `<div class="empty"><div class="icon">😶</div>No results found</div>`;
+    } else if (type === 'search') {
+      html += data.organic.map(r => `<div class="result-card"><div class="pos">#${r.position}</div><a href="${r.link}" target="_blank">${r.title}</a><div class="url">${r.link}</div>${r.snippet ? `<div class="snippet">${r.snippet}</div>` : ''}<div class="meta-row">${r.engine ? `<span class="tag">${r.engine}</span>` : ''}${r.date ? `<span class="tag">${r.date}</span>` : ''}</div></div>`).join('');
+    } else if (type === 'news') {
+      html += data.news.map(r => `<div class="result-card"><div class="pos">#${r.position}</div><a href="${r.link}" target="_blank">${r.title}</a><div class="url">${r.link}</div>${r.snippet ? `<div class="snippet">${r.snippet}</div>` : ''}<div class="meta-row">${r.source ? `<span class="tag">📰 ${r.source}</span>` : ''}${r.date ? `<span class="tag">${r.date}</span>` : ''}</div></div>`).join('');
+    } else if (type === 'images') {
+      html += `<div class="images-grid">` + data.images.map(r => `<a class="image-card" href="${r.link || r.imageUrl}" target="_blank"><img src="${r.imageUrl}" alt="${r.title}" loading="lazy" onerror="this.style.display='none'" /><div class="img-title">${r.title}</div></a>`).join('') + `</div>`;
+    } else if (type === 'videos') {
+      html += data.videos.map(r => `<a class="video-card" href="${r.link}" target="_blank">${r.imageUrl ? `<img class="video-thumb" src="${r.imageUrl}" alt="${r.title}" loading="lazy" onerror="this.style.display='none'" />` : ''}<div class="video-info"><div class="v-title">${r.title}</div>${r.snippet ? `<div class="v-snippet">${r.snippet}</div>` : ''}<div class="v-meta">${r.duration ? `<span class="tag">⏱ ${r.duration}</span>` : ''}${r.source ? `<span class="tag">${r.source}</span>` : ''}</div></div></a>`).join('');
+    }
+    html += `<details class="json-toggle"><summary>View raw JSON response</summary><pre class="json">${JSON.stringify(data, null, 2)}</pre></details>`;
+    wrap.innerHTML = html;
+  }
+
+  // ── Extract ───────────────────────────────────────────────────────────────
+
+  document.getElementById('extractUrl').addEventListener('keydown', e => { if (e.key === 'Enter') doExtract(); });
+
+  async function doExtract() {
+    const url = document.getElementById('extractUrl').value.trim();
+    if (!url || !BASE_URL) return;
+    const key   = API_KEY;
+    const mode  = document.getElementById('extractMode').value;
+    const ti    = parseInt(document.getElementById('tableIndex').value) || 0;
+    const btn   = document.getElementById('extractBtn');
+    btn.disabled = true; btn.textContent = 'Extracting…';
+    document.getElementById('extractResults').innerHTML = '<div class="spinner"><div class="ring"></div><span>Fetching &amp; extracting…</span></div>';
+    try {
+      const res  = await fetch(`${BASE_URL}/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+        body: JSON.stringify({ url, mode, table_index: ti })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      extractData = data; extractPage = 0; renderExtractTable();
+    } catch (err) {
+      document.getElementById('extractResults').innerHTML = `<div class="error-box">⚠️ ${err.message}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Extract';
+    }
+  }
+
+  function renderExtractTable() {
+    if (!extractData) return;
+    const { columns, rows, count, mode, title, tables_found } = extractData;
+    const start = extractPage * PAGE_SIZE;
+    const pageRows = rows.slice(start, start + PAGE_SIZE);
+    const totalPages = Math.ceil(rows.length / PAGE_SIZE);
+    const modeLabel = { tables: '📊 Table', links: '🔗 Links', list: '📋 List', auto: '🤖 Auto' }[mode] || mode;
+    const tableInfo = mode === 'tables' && tables_found > 1 ? ` &nbsp;·&nbsp; <span class="tag">${tables_found} tables on page</span>` : '';
+    const hdr  = columns.map(c => `<th>${c}</th>`).join('');
+    const body = pageRows.map(row => `<tr>${row.map((cell, i) => { const isUrl = cell && (cell.startsWith('http://') || cell.startsWith('https://')); return isUrl ? `<td><a href="${cell}" target="_blank" title="${cell}">${cell.length > 60 ? cell.slice(0,60)+'…' : cell}</a></td>` : `<td title="${cell}">${cell}</td>`; }).join('')}</tr>`).join('');
+    document.getElementById('extractResults').innerHTML = `
+      <div class="table-meta">
+        <div class="info"><span style="background:var(--success);display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px"></span><strong>${count.toLocaleString()}</strong> rows · <strong>${columns.length}</strong> cols &nbsp;·&nbsp; ${modeLabel}${tableInfo}${title ? ` &nbsp;·&nbsp; <em style="color:var(--muted)">${title}</em>` : ''}</div>
+        <button class="csv-btn" onclick="downloadCSV()">⬇ Download CSV</button>
+      </div>
+      <div class="table-scroll" style="max-height:480px;overflow-y:auto"><table class="data-table"><thead><tr>${hdr}</tr></thead><tbody>${body}</tbody></table></div>
+      ${totalPages > 1 ? `<div class="table-page-controls"><button class="page-btn" onclick="changePage(-1)" ${extractPage===0?'disabled':''}>← Prev</button><span>Page ${extractPage+1} of ${totalPages}</span><button class="page-btn" onclick="changePage(1)" ${extractPage>=totalPages-1?'disabled':''}>Next →</button></div>` : ''}
+      <details class="json-toggle" style="margin-top:24px"><summary>View raw JSON response</summary><pre class="json">${JSON.stringify(extractData, null, 2)}</pre></details>`;
+  }
+
+  function changePage(dir) { extractPage += dir; renderExtractTable(); }
+
+  function downloadCSV() {
+    if (!extractData) return;
+    const { columns, rows, url } = extractData;
+    const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = [columns.map(esc).join(','), ...rows.map(r => r.map(esc).join(','))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `extract_${new URL(url).hostname}_${Date.now()}.csv`;
+    a.click();
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  loadConfig();
+</script>
+</body>
+</html>
