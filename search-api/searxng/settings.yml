@@ -1,0 +1,32 @@
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "Search API"
+  privacypolicy_url: false
+  donation_url: false
+  contact_url: false
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "en"
+  formats:
+    - html
+    - json
+    - csv
+    - rss
+
+server:
+  secret_key: "changeme_use_a_random_32char_string_in_prod"
+  limiter: false
+  image_proxy: true
+  method: "GET"
+
+ui:
+  static_use_hash: true
+  default_locale: "en"
+  query_in_title: false
+  infinite_scroll: false
+  default_theme: simple
