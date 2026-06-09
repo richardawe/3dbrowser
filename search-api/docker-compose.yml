@@ -71,6 +71,21 @@ services:
       - search-net
     restart: unless-stopped
 
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: search-tunnel
+    command: tunnel --no-autoupdate --url http://api:8000
+    depends_on:
+      - api
+    networks:
+      - search-net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
 networks:
   search-net:
     driver: bridge
