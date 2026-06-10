@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Engine</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --accent: #7c6af7;
+      --accent2: #58a6ff;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --good: #3fb950;
+      --warn: #d29922;
+      --bad: #f85149;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; min-height: 100vh; }
+
+    /* ── Header ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 20px 0; position: sticky; top: 0; z-index: 10; }
+    .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    header h1 { font-size: 1.1rem; font-weight: 700; }
+    .model-pill { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; font-size: 0.72rem; color: var(--muted); padding: 2px 10px; }
+    .tabs { display: flex; gap: 2px; }
+    .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; font: inherit; font-size: 0.85rem; padding: 8px 14px; transition: color .15s, border-color .15s; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── Layout ── */
+    main { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Inputs ── */
+    .search-row { display: flex; gap: 8px; margin-bottom: 16px; }
+    input[type=text], input[type=time], input[type=number], select {
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+      color: var(--text); font: inherit; padding: 9px 12px; outline: none; transition: border-color .15s;
+    }
+    input[type=text]:focus, input[type=time]:focus, input[type=number]:focus, select:focus { border-color: var(--accent); }
+    .search-row input[type=text] { flex: 1; font-size: 0.95rem; }
+    button { background: var(--accent); border: none; border-radius: var(--radius); color: #fff; cursor: pointer; font: inherit; font-size: 0.85rem; font-weight: 600; padding: 9px 18px; transition: opacity .15s; }
+    button:hover { opacity: .85; }
+    button.secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+    button.danger { background: var(--bad); }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Activity feed ── */
+    .activity { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; min-height: 0; }
+    .chip { align-items: center; border-radius: 20px; display: inline-flex; font-size: 0.78rem; gap: 6px; padding: 4px 12px; }
+    .chip.loading { background: var(--surface2); border: 1px solid var(--border); animation: pulse 1.2s infinite; }
+    .chip.done { background: #1a3a2a; border: 1px solid #2d6a44; color: var(--good); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+    /* ── Answer panel ── */
+    .result-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+    .answer-body { line-height: 1.75; }
+    .answer-body h1,.answer-body h2,.answer-body h3 { color: var(--text); margin: 16px 0 8px; }
+    .answer-body p { margin-bottom: 10px; }
+    .answer-body ul,.answer-body ol { padding-left: 20px; margin-bottom: 10px; }
+    .answer-body li { margin-bottom: 4px; }
+    .answer-body a { color: var(--accent2); }
+    .answer-body code { background: var(--surface2); border-radius: 4px; font-size: 0.85em; padding: 1px 5px; }
+    .answer-body pre { background: var(--surface2); border-radius: var(--radius); overflow-x: auto; padding: 12px 16px; margin: 12px 0; }
+    .answer-body blockquote { border-left: 3px solid var(--accent); color: var(--muted); padding-left: 12px; margin: 10px 0; }
+
+    /* ── Image strip ── */
+    .image-strip { display: flex; gap: 8px; margin: 16px 0; overflow-x: auto; padding-bottom: 4px; }
+    .image-strip::-webkit-scrollbar { height: 4px; }
+    .image-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .img-thumb { border-radius: 6px; flex-shrink: 0; height: 90px; overflow: hidden; width: 130px; }
+    .img-thumb img { height: 100%; object-fit: cover; transition: transform .2s; width: 100%; }
+    .img-thumb:hover img { transform: scale(1.05); }
+
+    /* ── QA badge ── */
+    .qa-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); margin-top: 16px; padding: 12px 16px; }
+    .qa-header { align-items: center; display: flex; gap: 10px; margin-bottom: 6px; }
+    .qa-label { color: var(--muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+    .qa-score { font-size: 1rem; font-weight: 700; }
+    .qa-bar-wrap { background: var(--border); border-radius: 4px; flex: 1; height: 6px; overflow: hidden; }
+    .qa-bar-fill { border-radius: 4px; height: 100%; transition: width .4s; }
+    .qa-verdict { font-size: 0.8rem; font-weight: 600; }
+    .qa-good .qa-score, .qa-good .qa-verdict { color: var(--good); }
+    .qa-good .qa-bar-fill { background: var(--good); }
+    .qa-warn .qa-score, .qa-warn .qa-verdict { color: var(--warn); }
+    .qa-warn .qa-bar-fill { background: var(--warn); }
+    .qa-bad .qa-score, .qa-bad .qa-verdict { color: var(--bad); }
+    .qa-bad .qa-bar-fill { background: var(--bad); }
+    .qa-unknown .qa-score, .qa-unknown .qa-verdict { color: var(--muted); }
+    .qa-unknown .qa-bar-fill { background: var(--muted); }
+    .qa-concerns { color: var(--muted); font-size: 0.8rem; list-style: none; margin-top: 6px; }
+    .qa-concerns li::before { content: "⚠ "; }
+    .qa-concerns li { margin-bottom: 2px; }
+
+    /* ── Sources ── */
+    .sources { border-top: 1px solid var(--border); color: var(--muted); font-size: 0.78rem; margin-top: 14px; padding-top: 12px; }
+    .sources strong { color: var(--text); display: block; margin-bottom: 6px; }
+    .source-item { margin-bottom: 2px; }
+
+    /* ── Briefing cards ── */
+    .briefing-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; overflow: hidden; }
+    .briefing-card-header { background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 600; padding: 10px 16px; }
+    .briefing-card-body { display: flex; gap: 16px; padding: 14px 16px; }
+    .briefing-images { display: flex; flex-direction: column; flex-shrink: 0; gap: 6px; width: 120px; }
+    .briefing-img { border-radius: 6px; height: 70px; object-fit: cover; width: 100%; }
+    .briefing-bullets { flex: 1; font-size: 0.9rem; line-height: 1.7; white-space: pre-wrap; }
+    .briefing-progress { align-items: center; color: var(--muted); display: flex; font-size: 0.85rem; gap: 8px; margin-bottom: 12px; }
+    .spinner { animation: spin .8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Topics bar ── */
+    .topics-bar { margin-bottom: 16px; }
+    .topic-input-row { display: flex; gap: 8px; margin-bottom: 10px; }
+    .topic-input-row input { flex: 1; }
+    .topic-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .topic-chip { align-items: center; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; display: inline-flex; font-size: 0.8rem; gap: 6px; padding: 4px 10px; }
+    .topic-chip button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; padding: 0 2px; }
+    .topic-chip button:hover { color: var(--bad); }
+    .action-row { display: flex; gap: 8px; margin-bottom: 20px; }
+
+    /* ── Schedules ── */
+    .schedule-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; padding: 14px 16px; }
+    .schedule-card-row { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; }
+    .schedule-name { font-weight: 600; }
+    .schedule-meta { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
+    .schedule-status { font-size: 0.78rem; margin-top: 4px; }
+    .status-success { color: var(--good); }
+    .status-error { color: var(--bad); }
+    .empty-state { color: var(--muted); font-size: 0.9rem; padding: 24px 0; text-align: center; }
+
+    /* ── History ── */
+    .history-item { align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 8px; padding: 12px 16px; transition: border-color .15s; }
+    .history-item:hover { border-color: var(--accent); }
+    .history-label { font-size: 0.9rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history-meta { color: var(--muted); flex-shrink: 0; font-size: 0.78rem; text-align: right; }
+    .history-detail { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-top: 16px; padding: 20px; }
+
+    /* ── Modal ── */
+    .modal-overlay { align-items: center; background: rgba(0,0,0,.7); bottom: 0; display: flex; justify-content: center; left: 0; position: fixed; right: 0; top: 0; z-index: 100; }
+    .modal-overlay.hidden { display: none; }
+    .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; max-width: 440px; padding: 24px; width: 100%; }
+    .modal-box h3 { font-size: 1rem; margin-bottom: 16px; }
+    .form-row { margin-bottom: 12px; }
+    .form-row label { color: var(--muted); display: block; font-size: 0.78rem; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; }
+    .form-row input, .form-row select { width: 100%; }
+    .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+    .hidden { display: none !important; }
+    .section-title { color: var(--muted); font-size: 0.75rem; font-weight: 600; letter-spacing: .05em; margin-bottom: 14px; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <h1>🔍 Research Engine</h1>
+    <span class="model-pill">glm-4.7-flash · QA: lfm2.5-thinking</span>
+  </div>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="research" onclick="setTab('research')">Research</button>
+    <button class="tab-btn" data-tab="briefing" onclick="setTab('briefing')">News Briefing</button>
+    <button class="tab-btn" data-tab="schedules" onclick="setTab('schedules')">Schedules</button>
+    <button class="tab-btn" data-tab="history" onclick="setTab('history')">History</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ── Research ────────────────────────────────────────── -->
+  <div id="tab-research" class="tab-content active">
+    <div class="search-row">
+      <input id="research-input" type="text" placeholder="Ask anything… e.g. What are the best UK buy-to-let areas in 2026?" onkeydown="if(event.key==='Enter')doResearch()" />
+      <button id="research-btn" onclick="doResearch()">Research</button>
+    </div>
+
+    <div id="research-activity" class="activity hidden"></div>
+
+    <div id="research-result" class="result-panel hidden">
+      <div id="answer-body" class="answer-body"></div>
+      <div id="answer-images" class="image-strip"></div>
+      <div id="answer-qa"></div>
+      <div id="answer-sources" class="sources hidden"></div>
+    </div>
+  </div>
+
+  <!-- ── News Briefing ────────────────────────────────────── -->
+  <div id="tab-briefing" class="tab-content">
+    <div class="topics-bar">
+      <div class="topic-input-row">
+        <input id="topic-input" type="text" placeholder="Add a topic… e.g. UK Real Estate" onkeydown="if(event.key==='Enter')addTopic()" />
+        <button onclick="addTopic()">Add</button>
+      </div>
+      <div id="topic-chips" class="topic-chips"></div>
+    </div>
+
+    <div class="action-row">
+      <button id="briefing-btn" onclick="runBriefing()">▶ Run Now</button>
+      <button class="secondary" onclick="showScheduleModal('briefing')">⏰ Schedule</button>
+    </div>
+
+    <div id="briefing-progress" class="briefing-progress hidden">
+      <span class="spinner">⟳</span> <span id="briefing-progress-text">Starting…</span>
+    </div>
+
+    <div id="briefing-cards"></div>
+    <div id="briefing-qa"></div>
+  </div>
+
+  <!-- ── Schedules ────────────────────────────────────────── -->
+  <div id="tab-schedules" class="tab-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <span class="section-title" style="margin:0">Scheduled Jobs</span>
+      <button onclick="showScheduleModal()">+ New Schedule</button>
+    </div>
+    <div id="schedule-list"></div>
+  </div>
+
+  <!-- ── History ──────────────────────────────────────────── -->
+  <div id="tab-history" class="tab-content">
+    <span class="section-title">Past Results</span>
+    <div id="history-list"></div>
+    <div id="history-detail" class="hidden"></div>
+  </div>
+
+</main>
+
+<!-- ── Schedule modal ─────────────────────────────────────── -->
+<div id="modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <h3>New Schedule</h3>
+
+    <div class="form-row">
+      <label>Name</label>
+      <input id="s-name" type="text" placeholder="Daily Briefing" />
+    </div>
+    <div class="form-row">
+      <label>Type</label>
+      <select id="s-type" onchange="onTypeChange()">
+        <option value="briefing">News Briefing (uses current topics)</option>
+        <option value="research">Research Query</option>
+      </select>
+    </div>
+    <div id="s-query-row" class="form-row hidden">
+      <label>Query</label>
+      <input id="s-query" type="text" placeholder="UK property market outlook 2026" />
+    </div>
+    <div class="form-row">
+      <label>Frequency</label>
+      <select id="s-freq" onchange="onFreqChange()">
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="interval">Every N hours</option>
+      </select>
+    </div>
+    <div id="s-time-row" class="form-row">
+      <label>Time (UTC)</label>
+      <input id="s-time" type="time" value="08:00" />
+    </div>
+    <div id="s-day-row" class="form-row hidden">
+      <label>Day of week</label>
+      <select id="s-day">
+        <option value="mon">Monday</option>
+        <option value="tue">Tuesday</option>
+        <option value="wed">Wednesday</option>
+        <option value="thu">Thursday</option>
+        <option value="fri">Friday</option>
+        <option value="sat">Saturday</option>
+        <option value="sun">Sunday</option>
+      </select>
+    </div>
+    <div id="s-hours-row" class="form-row hidden">
+      <label>Every N hours</label>
+      <input id="s-hours" type="number" value="6" min="1" max="168" />
+    </div>
+
+    <div class="modal-btns">
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <button onclick="createSchedule()">Save Schedule</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let topics = ['UK Real Estate', 'AI Technology', 'London Property Market', 'Technology News'];
+let _chipCounter = 0;
+const _chipNames = {}; // tool name → last chip id
+let _answerBuffer = '';   // streamed answer text
+let _renderTimer = null;  // debounce handle for markdown render
+
+marked.setOptions({ breaks: true, gfm: true });
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function setTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === `tab-${name}`));
+  if (name === 'schedules') loadSchedules();
+  if (name === 'history') loadHistory();
+}
+
+// ── SSE reader ────────────────────────────────────────────────────────────────
+async function streamSSE(url, body, onEvent, onDone) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split(/\r?\n\r?\n/);
+    buf = parts.pop() ?? '';
+    for (const part of parts) {
+      for (const line of part.split(/\r?\n/)) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6);
+        if (raw === '[DONE]') { onDone(); return; }
+        try { onEvent(JSON.parse(raw)); } catch (_) {}
+      }
+    }
+  }
+  onDone();
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function qaHtml(qa) {
+  const score = qa.score || 0;
+  const verdict = qa.verdict || 'Unknown';
+  const concerns = qa.concerns || [];
+  const cls = score >= 8 ? 'qa-good' : score >= 5 ? 'qa-warn' : score > 0 ? 'qa-bad' : 'qa-unknown';
+  const cList = concerns.length
+    ? `<ul class="qa-concerns">${concerns.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>` : '';
+  return `<div class="qa-box ${cls}">
+    <div class="qa-header">
+      <span class="qa-label">QA Review</span>
+      <span class="qa-score">${score}/10</span>
+      <div class="qa-bar-wrap"><div class="qa-bar-fill" style="width:${score*10}%"></div></div>
+      <span class="qa-verdict">${esc(verdict)}</span>
+    </div>${cList}</div>`;
+}
+
+
+// ── Research tab ──────────────────────────────────────────────────────────────
+function doResearch() {
+  const q = document.getElementById('research-input').value.trim();
+  if (!q) return;
+
+  const btn = document.getElementById('research-btn');
+  btn.disabled = true;
+  btn.textContent = '…';
+
+  const activity = document.getElementById('research-activity');
+  const result = document.getElementById('research-result');
+  const body = document.getElementById('answer-body');
+  const images = document.getElementById('answer-images');
+  const qaEl = document.getElementById('answer-qa');
+  const sources = document.getElementById('answer-sources');
+
+  activity.innerHTML = '';
+  activity.classList.remove('hidden');
+  result.classList.add('hidden');
+  body.innerHTML = '';
+  images.innerHTML = '';
+  qaEl.innerHTML = '';
+  sources.innerHTML = '';
+  sources.classList.add('hidden');
+  _chipCounter = 0;
+  _answerBuffer = '';
+  clearTimeout(_renderTimer);
+  Object.keys(_chipNames).forEach(k => delete _chipNames[k]);
+
+  let sourceItems = [];
+
+  streamSSE('/ask', { question: q }, (ev) => {
+    // ── Streaming token ──────────────────────────────────────────────────────
+    if (ev.type === 'answer_chunk') {
+      result.classList.remove('hidden');
+      _answerBuffer += ev.token || '';
+      // Debounced markdown render — smooth display without constant re-parsing
+      clearTimeout(_renderTimer);
+      _renderTimer = setTimeout(() => {
+        body.innerHTML = marked.parse(_answerBuffer);
+      }, 80);
+    }
+    // ── Model called tools — discard streamed preamble ───────────────────────
+    else if (ev.type === 'clear_answer') {
+      _answerBuffer = '';
+      clearTimeout(_renderTimer);
+      body.innerHTML = '';
+      result.classList.add('hidden');
+    }
+    // ── Full answer (server saves this; frontend only uses if no chunks yet) ──
+    else if (ev.type === 'answer') {
+      result.classList.remove('hidden');
+      if (!_answerBuffer) {
+        _answerBuffer = ev.content || '';
+      }
+      clearTimeout(_renderTimer);
+      body.innerHTML = marked.parse(_answerBuffer);
+    }
+    // ── Tool call chip ───────────────────────────────────────────────────────
+    else if (ev.type === 'tool_call') {
+      const id = 'chip-' + _chipCounter++;
+      _chipNames[ev.name + '_last'] = id;
+      const icons = { web_search: '🔍', news_search: '📰', extract_url: '📄' };
+      const icon = icons[ev.name] || '⚙️';
+      const label = esc((ev.query || '').slice(0, 55));
+      activity.insertAdjacentHTML('beforeend',
+        `<span id="${id}" class="chip loading">${icon} ${label}</span>`);
+    }
+    else if (ev.type === 'tool_result') {
+      const id = _chipNames[ev.name + '_last'];
+      if (id) {
+        const chip = document.getElementById(id);
+        if (chip) chip.classList.replace('loading', 'done');
+      }
+    }
+    // ── Images ───────────────────────────────────────────────────────────────
+    else if (ev.type === 'images') {
+      const imgEl = document.getElementById('answer-images');
+      imgEl.innerHTML = (ev.items || []).map(i =>
+        `<a class="img-thumb" href="${esc(i.link||'#')}" target="_blank" rel="noopener">
+          <img src="${esc(i.url)}" alt="${esc(i.title||'')}" loading="lazy"
+               onerror="this.parentElement.style.display='none'" />
+        </a>`).join('');
+    }
+    else if (ev.type === 'sources') {
+      sourceItems = ev.items || [];
+    }
+    // ── QA ───────────────────────────────────────────────────────────────────
+    else if (ev.type === 'qa_start') {
+      qaEl.innerHTML = '<div class="qa-box qa-unknown"><div class="qa-header"><span class="qa-label">QA Review</span><span class="spinner" style="margin-left:8px">⟳</span></div></div>';
+    }
+    else if (ev.type === 'qa_result') {
+      // Final markdown render before showing QA
+      clearTimeout(_renderTimer);
+      body.innerHTML = marked.parse(_answerBuffer);
+      qaEl.innerHTML = qaHtml(ev);
+      if (sourceItems.length) {
+        sources.classList.remove('hidden');
+        sources.innerHTML = `<strong>Sources searched</strong>` +
+          sourceItems.map((s, i) =>
+            `<div class="source-item">[${i+1}] ${esc(s.query)} <span style="color:var(--muted)">(${s.type.replace('_', ' ')})</span></div>`
+          ).join('');
+      }
+    }
+    // ── Error ─────────────────────────────────────────────────────────────────
+    else if (ev.type === 'error') {
+      result.classList.remove('hidden');
+      body.innerHTML = `<div style="color:var(--bad);padding:8px 0">⚠ ${esc(ev.message || 'Unknown error')}</div>`;
+    }
+  }, () => {
+    clearTimeout(_renderTimer);
+    if (_answerBuffer) body.innerHTML = marked.parse(_answerBuffer);
+    btn.disabled = false;
+    btn.textContent = 'Research';
+  });
+}
+
+
+// ── Briefing tab ──────────────────────────────────────────────────────────────
+function renderTopics() {
+  const wrap = document.getElementById('topic-chips');
+  wrap.innerHTML = topics.map((t, i) =>
+    `<span class="topic-chip">${esc(t)}<button onclick="removeTopic(${i})" title="Remove">×</button></span>`
+  ).join('');
+}
+
+function addTopic() {
+  const inp = document.getElementById('topic-input');
+  const v = inp.value.trim();
+  if (v && !topics.includes(v)) { topics.push(v); renderTopics(); }
+  inp.value = '';
+}
+
+function removeTopic(i) {
+  topics.splice(i, 1);
+  renderTopics();
+}
+
+function runBriefing() {
+  if (!topics.length) { alert('Add at least one topic first.'); return; }
+  const btn = document.getElementById('briefing-btn');
+  btn.disabled = true;
+
+  const progress = document.getElementById('briefing-progress');
+  const progressText = document.getElementById('briefing-progress-text');
+  const cards = document.getElementById('briefing-cards');
+  const qaEl = document.getElementById('briefing-qa');
+
+  progress.classList.remove('hidden');
+  cards.innerHTML = '';
+  qaEl.innerHTML = '';
+
+  streamSSE('/briefing/run', { topics }, (ev) => {
+    if (ev.type === 'briefing_topic_start') {
+      progressText.textContent = `Fetching: ${ev.topic}…`;
+    }
+    else if (ev.type === 'briefing_topic_done') {
+      const imgs = (ev.images || []).slice(0, 2).map(i =>
+        `<img class="briefing-img" src="${esc(i.url)}" alt="${esc(i.title||'')}" loading="lazy"
+              onerror="this.style.display='none'" />`).join('');
+      cards.insertAdjacentHTML('beforeend', `
+        <div class="briefing-card">
+          <div class="briefing-card-header">${esc(ev.topic)}</div>
+          <div class="briefing-card-body">
+            ${imgs ? `<div class="briefing-images">${imgs}</div>` : ''}
+            <div class="briefing-bullets">${esc(ev.summary || '')}</div>
+          </div>
+        </div>`);
+    }
+    else if (ev.type === 'briefing_topic_error') {
+      cards.insertAdjacentHTML('beforeend',
+        `<div class="briefing-card"><div class="briefing-card-header">${esc(ev.topic)}</div>
+         <div style="padding:14px 16px;color:var(--bad)">Error: ${esc(ev.error)}</div></div>`);
+    }
+    else if (ev.type === 'qa_start') {
+      qaEl.innerHTML = '<div class="qa-box qa-unknown" style="margin-top:16px"><div class="qa-header"><span class="qa-label">QA Review</span><span class="spinner" style="margin-left:8px">⟳</span></div></div>';
+    }
+    else if (ev.type === 'qa_result') {
+      qaEl.innerHTML = `<div style="margin-top:4px">${qaHtml(ev)}</div>`;
+    }
+  }, () => {
+    progress.classList.add('hidden');
+    btn.disabled = false;
+  });
+}
+
+// ── Schedules tab ─────────────────────────────────────────────────────────────
+async function loadSchedules() {
+  const list = document.getElementById('schedule-list');
+  list.innerHTML = '<div class="empty-state">Loading…</div>';
+  const jobs = await fetch('/schedules').then(r => r.json()).catch(() => []);
+  if (!jobs.length) {
+    list.innerHTML = '<div class="empty-state">No schedules yet — create one to run briefings or research automatically.</div>';
+    return;
+  }
+  list.innerHTML = jobs.map(j => {
+    const s = j.schedule || {};
+    let freq = '';
+    if (s.type === 'daily') freq = `Daily at ${s.time} UTC`;
+    else if (s.type === 'weekly') freq = `Every ${s.day} at ${s.time} UTC`;
+    else if (s.type === 'interval') freq = `Every ${s.hours} hours`;
+    const nextRun = j.next_run ? new Date(j.next_run).toLocaleString() : '—';
+    const lastRun = j.last_run ? new Date(j.last_run).toLocaleString() : 'Never';
+    const statusCls = j.last_status === 'success' ? 'status-success' : j.last_status ? 'status-error' : '';
+    const args = Array.isArray(j.args) ? j.args.join(', ') : j.args;
+    return `<div class="schedule-card">
+      <div class="schedule-card-row">
+        <div>
+          <div class="schedule-name">${esc(j.name)}</div>
+          <div class="schedule-meta">${esc(j.type)} · ${esc(freq)} · <em>${esc(args)}</em></div>
+          <div class="schedule-meta">Next: ${esc(nextRun)} · Last: ${esc(lastRun)}</div>
+          ${j.last_status ? `<div class="schedule-status ${statusCls}">${esc(j.last_status)}</div>` : ''}
+        </div>
+        <button class="danger" onclick="deleteSchedule('${esc(j.id)}')">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function deleteSchedule(id) {
+  if (!confirm('Delete this schedule?')) return;
+  await fetch(`/schedules/${id}`, { method: 'DELETE' });
+  loadSchedules();
+}
+
+// ── History tab ───────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const list = document.getElementById('history-list');
+  const detail = document.getElementById('history-detail');
+  detail.classList.add('hidden');
+  list.innerHTML = '<div class="empty-state">Loading…</div>';
+  const items = await fetch('/history').then(r => r.json()).catch(() => []);
+  if (!items.length) {
+    list.innerHTML = '<div class="empty-state">No history yet — run a research or briefing first.</div>';
+    return;
+  }
+  list.innerHTML = items.map(item => {
+    const ts = item.ts ? new Date(item.ts).toLocaleString() : '';
+    const score = item.qa_score != null ? ` · QA ${item.qa_score}/10` : '';
+    const badge = item.type === 'briefing' ? '📰' : '🔍';
+    return `<div class="history-item" onclick="viewHistory('${esc(item.id)}')">
+      <div class="history-label">${badge} ${esc(item.label || item.id)}</div>
+      <div class="history-meta">${esc(ts)}${score}</div>
+    </div>`;
+  }).join('');
+}
+
+async function viewHistory(id) {
+  const detail = document.getElementById('history-detail');
+  detail.innerHTML = '<div style="color:var(--muted);padding:12px">Loading…</div>';
+  detail.classList.remove('hidden');
+  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  const item = await fetch(`/history/${id}`).then(r => r.json()).catch(() => null);
+  if (!item) { detail.innerHTML = '<div style="color:var(--bad)">Failed to load.</div>'; return; }
+
+  const ts = item.ts ? new Date(item.ts).toLocaleString() : '';
+  let inner = `<div style="color:var(--muted);font-size:.8rem;margin-bottom:14px">${esc(ts)}</div>`;
+
+  if (item.type === 'research') {
+    inner += `<div class="answer-body">${marked.parse(item.content || '')}</div>`;
+    inner += qaHtml(item.qa || {});
+  } else if (item.type === 'briefing') {
+    const results = item.content || [];
+    inner += results.map(r => {
+      const imgs = (r.images || []).slice(0, 2).map(i =>
+        `<img class="briefing-img" src="${esc(i.url)}" alt="${esc(i.title||'')}" loading="lazy"
+              onerror="this.style.display='none'" />`).join('');
+      return `<div class="briefing-card">
+        <div class="briefing-card-header">${esc(r.topic || '')}</div>
+        <div class="briefing-card-body">
+          ${imgs ? `<div class="briefing-images">${imgs}</div>` : ''}
+          <div class="briefing-bullets">${esc(r.summary || '')}</div>
+        </div>
+      </div>`;
+    }).join('');
+    inner += qaHtml(item.qa || {});
+  }
+
+  detail.innerHTML = inner;
+}
+
+// ── Schedule modal ────────────────────────────────────────────────────────────
+let _modalContext = null;
+
+function showScheduleModal(preType) {
+  _modalContext = preType || null;
+  if (preType) {
+    document.getElementById('s-type').value = preType;
+    onTypeChange();
+  }
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+function onTypeChange() {
+  const t = document.getElementById('s-type').value;
+  document.getElementById('s-query-row').classList.toggle('hidden', t !== 'research');
+}
+
+function onFreqChange() {
+  const f = document.getElementById('s-freq').value;
+  document.getElementById('s-time-row').classList.toggle('hidden', f === 'interval');
+  document.getElementById('s-day-row').classList.toggle('hidden', f !== 'weekly');
+  document.getElementById('s-hours-row').classList.toggle('hidden', f !== 'interval');
+}
+
+async function createSchedule() {
+  const name = document.getElementById('s-name').value.trim();
+  const type = document.getElementById('s-type').value;
+  const query = document.getElementById('s-query').value.trim();
+  const freq = document.getElementById('s-freq').value;
+  const time = document.getElementById('s-time').value;
+  const day = document.getElementById('s-day').value;
+  const hours = parseInt(document.getElementById('s-hours').value) || 6;
+
+  if (!name) { alert('Enter a name for the schedule.'); return; }
+  if (type === 'research' && !query) { alert('Enter a research query.'); return; }
+  if (type === 'briefing' && !topics.length) { alert('Add topics in the News Briefing tab first.'); return; }
+
+  const schedule = freq === 'daily' ? { type: 'daily', time }
+    : freq === 'weekly' ? { type: 'weekly', time, day }
+    : { type: 'interval', hours };
+
+  const args = type === 'briefing' ? [...topics] : query;
+
+  const res = await fetch('/schedules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, type, args, schedule }),
+  });
+
+  if (res.ok) {
+    closeModal();
+    setTab('schedules');
+  } else {
+    alert('Failed to create schedule.');
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderTopics();
+</script>
+</body>
+</html>
